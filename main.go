@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
+	"log"
 	"math"
 	"math/cmplx"
+	"os"
+	"strconv"
 
 	"gonum.org/v1/gonum/unit/constant"
 	"gonum.org/v1/plot"
@@ -35,35 +39,36 @@ func linspace(start, stop float64, num int) []float64 {
 	return result
 }
 
-func plotIntensity(t []float64, intensity []float64, save_as string) {
-	p := plot.New()
+/*
+	func plotIntensity(t []float64, intensity []float64, save_as string) {
+		p := plot.New()
 
-	points := make(plotter.XYs, len(t))
-	for i := range points {
-		points[i].X = t[i]
-		points[i].Y = intensity[i]
+		points := make(plotter.XYs, len(t))
+		for i := range points {
+			points[i].X = t[i]
+			points[i].Y = intensity[i]
+		}
+		s, err := plotter.NewScatter(points)
+		if err != nil {
+			fmt.Println("Error creating scatter plotter:", err)
+			return
+		}
+
+		p.Add(s)
+
+		p.Title.Text = "Intensity Plot"
+		p.X.Label.Text = "Time"
+		p.Y.Label.Text = "Intensity"
+
+		err = p.Save(6*vg.Inch, 4*vg.Inch, save_as+".png")
+		if err != nil {
+			fmt.Println("Error saving plot:", err)
+			return
+		}
+
+		fmt.Println("Intensity plot saved as intensity_plot.png")
 	}
-	s, err := plotter.NewScatter(points)
-	if err != nil {
-		fmt.Println("Error creating scatter plotter:", err)
-		return
-	}
-
-	p.Add(s)
-
-	p.Title.Text = "Intensity Plot"
-	p.X.Label.Text = "Time"
-	p.Y.Label.Text = "Intensity"
-
-	err = p.Save(6*vg.Inch, 4*vg.Inch, save_as+".png")
-	if err != nil {
-		fmt.Println("Error saving plot:", err)
-		return
-	}
-
-	fmt.Println("Intensity plot saved as intensity_plot.png")
-}
-
+*/
 func generatePointerState(t []float64, pulseWidth float64, wavelength float64, z float64) []complex128 {
 	amplitude := 1 / math.Sqrt(math.Sqrt(2*math.Pi)*pulseWidth)
 	pointeur := make([]complex128, len(t))
@@ -262,7 +267,8 @@ func main() {
 	intensity := intensity_HV_Profile(initial_state, pointeur.Time)
 	//fmt.Println("Intensity profile:", intensity)
 
-	plotIntensity(pointeur.Time, intensity, "initial_intensity")
+	//plotIntensity(pointeur.Time, intensity, "initial_intensity")
+	write_to_csv(t, intensity, "time", "intensity", "initial_intensity")
 
 	interfered_state := mach_zedner_interference(initial_state, pointeur.Time, delay, weak_part)
 	fmt.Println("Intermediate state at index", 0, ":", interfered_state[0])
@@ -276,8 +282,8 @@ func main() {
 
 	post_intensity_profile := intensity_HV_Profile(postselected_state, pointeur.Time)
 
-	plotIntensity(pointeur.Time, post_intensity_profile, "post_selected")
-
+	//plotIntensity(pointeur.Time, post_intensity_profile, "post_selected")
+	write_to_csv(t, post_intensity_profile, "time", "intensity", "post_initial_intensity")
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 	E_1, E_2 := make([]complex128, len(pointeur.Time)), make([]complex128, len(pointeur.Time))
@@ -292,10 +298,13 @@ func main() {
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//plot degree of coherence
 	pts := make(plotter.XYs, len(g_1))
+	deg_g1 := make([]float64, len(g_1))
 	for i, degree := range g_1 {
 		//pts[i].X = float64(i)
 		pts[i].Y = cmplx.Abs(degree)
+		deg_g1[i] = cmplx.Abs(degree)
 	}
+	write_to_csv(t, deg_g1, "time", "coherence", "degree_of_coherence")
 
 	for i := range t {
 		pts[i].X = t[i]
@@ -319,5 +328,43 @@ func main() {
 		fmt.Println("Error saving plot:", err)
 		return
 	}
-	//---------------------------------------------------------------------------------------------------------------------------------
+}
+
+//---------------------------------------------------------------------------------------------------------------------------------
+
+func write_to_csv(x []float64, y []float64, x_name string, y_name string, name_of_file string) {
+	// Create a new CSV file
+	file, err := os.Create(name_of_file + ".csv")
+	if err != nil {
+		fmt.Println("Error creating CSV file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Create a CSV writer
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write the header row
+	header := []string{x_name, y_name}
+	err = writer.Write(header)
+	if err != nil {
+		fmt.Println("Error writing header:", err)
+		return
+	}
+
+	// Write the data rows
+	for i := 0; i < len(x); i++ {
+		record := []string{floatToString(x[i]), floatToString(y[i])}
+		err = writer.Write(record)
+		if err != nil {
+			log.Fatal("Error writing CSV record:", err)
+		}
+	}
+
+	fmt.Println("Data has been written to", name_of_file, ".csv")
+}
+
+func floatToString(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
